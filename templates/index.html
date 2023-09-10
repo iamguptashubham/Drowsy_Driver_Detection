@@ -1,11 +1,76 @@
-<!-- templates/index.html -->
+
 <!DOCTYPE html>
 <html>
 <head>
     <title>Drowsiness Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to right, #4B8980, #4D4C6A); /* Changed gradient direction */
+            color: white;
+        }
+
+        .container {
+            max-width: 600px;
+            margin-left: 50px; /* Align container to the left */
+            padding: 50px;
+        }
+
+        .header h1 {
+            font-size: 5em;
+            text-align: left;
+        }
+
+        .content h2 {
+            font-size: 2em; /* Increased size */
+            text-align: left;
+        }
+
+        .content p {
+            font-size: 1.5em;
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .button {
+            display: inline-block;
+            margin-top: 30px;
+            padding: 10px 20px;
+            background-color: #f9a602;
+            color: black;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+
+        /* Add styles for the image */
+        .image{
+            display: flex;
+            flex-direction: center;
+            align-items: center;
+            justify-content: center;
+            padding-bottom: 35px;
+
+        }
+    </style>
 </head>
 <body>
-    <h1>Drowsiness Detection</h1>
-    <img src="{{ url_for('video_feed') }}" width="640" height="480">
+    <div class="container">
+        <div class="header">
+            <h1>Drowsiness Detector</h1>
+        </div>
+
+        <div class="content">
+            <h1>Use AI to drive Safely</h1>
+            <p>Now you can use the power of AI to safe guard your familes.</p>
+            
+        </div>
+    </div>
+    <div class="image">
+        <img src="{{ url_for('video_feed') }}" alt="Your Image" class="center">
+    </div>
 </body>
 </html>
+```
+
