@@ -1,113 +1,81 @@
-# app.py
-import cv2
-import os
 from flask import Flask, render_template, Response
-from keras.models import load_model
+import cv2
 import numpy as np
-import time
-from pygame import mixer
+import dlib
+from imutils import face_utils
 
 app = Flask(__name__)
-mixer.init()
-sound = mixer.Sound('static/alarm.wav')
-
-face = cv2.CascadeClassifier('haar cascade files/haarcascade_frontalface_alt.xml')
-leye = cv2.CascadeClassifier('haar cascade files/haarcascade_lefteye_2splits.xml')
-reye = cv2.CascadeClassifier('haar cascade files/haarcascade_righteye_2splits.xml')
-
-lbl = ['Close', 'Open']
-model = load_model('models/cnncat2.h5')
-
-def gen_frames():
-    cap = cv2.VideoCapture(0)
-    font = cv2.FONT_HERSHEY_COMPLEX_SMALL
-    count = 0
-    score = 0
-    thicc = 2
-    rpred = [99]
-    lpred = [99]
-
-    while True:
-        ret, frame = cap.read()
-        height, width = frame.shape[:2]
-
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        faces = face.detectMultiScale(gray, minNeighbors=5, scaleFactor=1.1, minSize=(25, 25))
-        left_eye = leye.detectMultiScale(gray)
-        right_eye = reye.detectMultiScale(gray)
-
-        cv2.rectangle(frame, (0, height - 50), (200, height), (0, 0, 0), thickness=cv2.FILLED)
-
-        for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (100, 100, 100), 1)
-
-        for (x, y, w, h) in right_eye:
-            r_eye = frame[y:y + h, x:x + w]
-            count = count + 1
-            r_eye = cv2.cvtColor(r_eye, cv2.COLOR_BGR2GRAY)
-            r_eye = cv2.resize(r_eye, (24, 24))
-            r_eye = r_eye / 255
-            r_eye = r_eye.reshape(24, 24, -1)
-            r_eye = np.expand_dims(r_eye, axis=0)
-            rpred = np.argmax(model.predict(r_eye), axis=-1)
-            if rpred[0] == 1:
-                lbl = 'Open'
-            if rpred[0] == 0:
-                lbl = 'Closed'
-            break
-
-        for (x, y, w, h) in left_eye:
-            l_eye = frame[y:y + h, x:x + w]
-            count = count + 1
-            l_eye = cv2.cvtColor(l_eye, cv2.COLOR_BGR2GRAY)
-            l_eye = cv2.resize(l_eye, (24, 24))
-            l_eye = l_eye / 255
-            l_eye = l_eye.reshape(24, 24, -1)
-            l_eye = np.expand_dims(l_eye, axis=0)
-            lpred = np.argmax(model.predict(l_eye), axis=-1)
-            if lpred[0] == 1:
-                lbl = 'Open'
-            if lpred[0] == 0:
-                lbl = 'Closed'
-            break
-
-        if rpred[0] == 0 and lpred[0] == 0:
-            score = score + 1
-            cv2.putText(frame, "Closed", (10, height - 20), font, 1, (255, 255, 255), 1, cv2.LINE_AA)
-        else:
-            score = score - 1
-            cv2.putText(frame, "Open", (10, height - 20), font, 1, (255, 255, 255), 1, cv2.LINE_AA)
-
-        if score < 0:
-            score = 0
-        cv2.putText(frame, 'Score:' + str(score), (100, height - 20), font, 1, (255, 255, 255), 1, cv2.LINE_AA)
-
-        if score > 15:
-            cv2.imwrite(os.path.join('static', 'image.jpg'), frame)
-            try:
-                sound.play()
-            except:
-                pass
-            if thicc < 16:
-                thicc = thicc + 2
-            else:
-                thicc = thicc - 2
-                if thicc < 2:
-                    thicc = 2
-            cv2.rectangle(frame, (0, 0), (width, height), (0, 0, 255), thicc)
-
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+def gen():
+    cap = cv2.VideoCapture(0)
+    detector = dlib.get_frontal_face_detector()
+    predictor = dlib.shape_predictor("my_model.dat")
+    drowsy = 0
+    active = 0
+    status = ""
+    color = (0, 0, 0)
+
+
+    def compute(ptA, ptB):
+        dist = np.linalg.norm(ptA - ptB)
+        return dist
+
+    def blinked(a, b, c, d, e, f):
+        up = compute(b, d) + compute(c, e)
+        down = compute(a, f)
+        ratio = up / (2.0 * down)
+        if ratio > 0.25:
+            return 2
+        elif ratio > 0.21 and ratio <= 0.25:
+            return 1
+        else:
+            return 0
+
+    while True:
+        _, frame = cap.read()
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = detector(gray)
+        status = ""
+        color = (0, 0, 0)
+
+        for face in faces:
+            x1 = face.left()
+            y1 = face.top()
+            x2 = face.right()
+            y2 = face.bottom()
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            landmarks = predictor(gray, face)
+            landmarks = face_utils.shape_to_np(landmarks)
+            left_blink = blinked(landmarks[36], landmarks[37], landmarks[38], landmarks[41], landmarks[40], landmarks[39])
+            right_blink = blinked(landmarks[42], landmarks[43], landmarks[44], landmarks[47], landmarks[46], landmarks[45])
+
+            if left_blink == 0 or right_blink == 0:
+                drowsy += 1
+                active = 0
+                if drowsy > 6:
+                    status = "Drowsy"
+                    color = (0, 0, 255)
+            else:
+                drowsy = 0
+                active += 1
+                if active > 6:
+                    status = "Active"
+                    color = (0, 255, 0)
+
+        cv2.putText(frame, status, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+        ret, jpeg = cv2.imencode('.jpg', frame)
+        frame = jpeg.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
+
 @app.route('/video_feed')
 def video_feed():
-    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(gen(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', debug=True)
